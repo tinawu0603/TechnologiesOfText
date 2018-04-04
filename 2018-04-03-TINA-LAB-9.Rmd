@@ -1,0 +1,112 @@
+---
+title: "lab9-fieldbook"
+author: "me"
+date: "3/31/2018"
+output: html_document
+---
+
+## Set Up
+```{r}
+library(tidyverse)
+library(tidytext)
+library(gutenbergr)
+library(stringr)
+library(data.table)
+library(mallet)
+library(stringr)
+library(wordcloud)
+library(reshape2)
+```
+
+## Sentiments Cloud
+
+Using the command `??sentiments` I was able to find out some lexicons that I can use for each specific type of lexicon.
++ afinn: positive, negative
++ nrc: anger, anticipation, disgust, fear, joy, sadness, surprise, trust
++ loughran: litigious, uncertainty, constraining, superfluous
+
+```{r}
+booklist = gutenberg_works(gutenberg_bookshelf == "Adventure", languages = "en", only_text = TRUE)
+books = gutenberg_download(c(booklist$gutenberg_id),
+                            meta_fields = c("title","author"),
+                            strip = TRUE) %>%
+  group_by(title, author) %>%
+  mutate(linenumber = row_number()) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+
+# model
+told_in_east = books %>%
+  filter(title == "Told in the East")
+
+afinn = told_in_east %>%
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(index = linenumber %/% 80) %>%
+  summarise(sentiment = sum(score)) %>%
+  mutate(method = "AFINN")
+# Estimate of the net sentiment in each novel for each sentiment lexicon
+bing_and_nrc <- bind_rows(told_in_east %>% 
+                            inner_join(get_sentiments("bing")) %>%
+                            mutate(method = "Bing et al."),
+                          told_in_east %>% 
+                            inner_join(get_sentiments("nrc") %>% 
+                                         filter(sentiment %in% c("positive", 
+                                                                 "negative"))) %>%
+                            mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+Although the resulting plot looks mostly different at first glance, in closer analysis the general peaks of positives and negatives are at the same areas throughout the book. These three lexicons show different results because the degree of positivity and negativity vary. A lexicon such as Bing has a lot more negative words than positive words. The NRC lexicon has the largest variance and is a lot smoother in that the graph doesn't show a very high peak immediately following a very low drop, while these instances can be shwon in the Bing and AFINN lexicons. These are results I found rather interesting because a lexicon may consider the surrounding words more heavily than another lexicon, and in most novels the context is extremely crucial.
+
+As a scholar with an investigative mindset, I spent a good amount of time trying to figure out what each line of code in the lab does. Most of the lines puzzled me and I try to look up documentation for them but a lot of functions are built-in and very generic. I stumbled on a bug in the lab with seeing the positive and negative trends throughout the book and it took me a lot of hours to debug, but in the end I was still unable to figure out. So instead of trying to manipulate the code to make different graphs, I researched different ways of sentiment analysis and really liked the [sentiment cloud visualization](https://www.tidytextmining.com/sentiment.html) so I decided to focus the sentiment part of my fieldbook making a text cloud.
+
+```{r}
+books %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 30))
+```
+
+With lexicon sentiment analysis ... 
+
+```{r}
+books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"), max.words = 30)
+
+```
+
+## Plot Analysis
+
+One of the things that I imagine will be very interesting to model is plot analysis incorporating sentiments. To derive the general positivity or negativity of a sentence is very difficult for a lot of reasons - negation, tone, syntactic choices. English is dynamic. I am curious to see if the plot progression of a novel affects the reader's experience. Some novels have more variance in the highs and lows while other novels have a slower climb to the climax. How do plots differ among genres? Why certain plot plot patterns are more popular? How have plots changed with time?
+
+## Thoughts on Computational Linguistics and Natural Language Processing
+
+During the completion of this fieldbook, I've attempted to try a few different things but with my inexperience in the R programming language and table-manipulation, I did not know what I was doing and encountered bugs that I did not know how to resolve. In a few instances I felt frustrated because I start comparing how easy it would be to make pivot tables in Microsoft Excel while I had so much trouble just joining two tables together.
+
+It made me start thinking about the purpose of computational linguistics. Why are scholars so interested in dissecting a piece of literature into numbers and tables and graphs? There is a lot to be gain to understand the makings of literature. What is the pivot word in the sentence that changes the reader's feeling from good to wonderful? What are the topics this author tends to write about? Which lexicon best analyze the different genres? With the advancement of technology and computing, the English language has transformed from a dynamic and intangible area of study to a huge part of artificial intelligence and machine learning study.
+
+One of the challenges of computational linguistics lies in the subject itself; what is the goal? Is the goal just to understand literature better? Is the goal to find a magic formula for language? A huge part of computing revolves around an objective, a problem to solve. What is the most-used word in this novel - tokenize the text of the novel, count, then sort in descending order of the count. There is an algorithm in analysis yet the English language is not formulaic at all. There are grammar and syntax rules in place, but ultimately it is free-flowing, ever-changing. I'm curious to see where computational linguistics will evolve in the future and which direction it will take.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
